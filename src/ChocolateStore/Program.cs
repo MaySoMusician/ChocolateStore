@@ -47,8 +47,13 @@ namespace ChocolateStore
 
             if (!Directory.Exists(arguments.Directory))
             {
-                WriteError("Directory '{0}' does not exist.", arguments.Directory);
-                return null;
+                if (!PromptConfirm("Directory '{0}' does not exist. Create?", arguments.Directory))
+                {
+                    WriteError("Directory '{0}' does not exist.", arguments.Directory);
+                    return null;
+                }
+                Directory.CreateDirectory(arguments.Directory);
+                Console.WriteLine("Created Directory '{0}'", arguments.Directory);
             }
 
             arguments.Url = args[1];
@@ -98,6 +103,16 @@ namespace ChocolateStore
             Console.BackgroundColor = ConsoleColor.Red;
             Console.WriteLine(format, arg);
             Console.ResetColor();
+        }
+
+        private static bool PromptConfirm(string format, params object[] arg)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
+            Console.Write(format + " [y/n] ", arg);
+            Console.ResetColor();
+            ConsoleKey response = Console.ReadKey(false).Key;
+            Console.WriteLine();
+            return response == ConsoleKey.Y;
         }
 
     }
