@@ -21,7 +21,7 @@ namespace ChocolateStore
 
                 if (arguments != null)
                 {
-                    cacher.CachePackage(arguments.Directory, arguments.Url);
+                    cacher.CachePackage(arguments);
                 }
 
             }
@@ -51,12 +51,12 @@ namespace ChocolateStore
                 return null;
             }
 
-            arguments.Url = args[1];
-
-            if (!Uri.IsWellFormedUriString(arguments.Url, UriKind.Absolute))
+            if (Uri.IsWellFormedUriString(args[1], UriKind.Absolute))
             {
-                WriteError("URL '{0}' is invalid.", arguments.Url);
-                return null;
+                arguments.Url = args[1];
+            } else
+            {
+                arguments.PackageName = args[1];
             }
 
             return arguments;
