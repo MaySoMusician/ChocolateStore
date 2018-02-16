@@ -21,7 +21,7 @@ namespace ChocolateStore
 
                 if (arguments != null)
                 {
-                    cacher.CachePackage(arguments);
+                    cacher.CachePackage(arguments.PackageName, arguments.Directory);
                 }
 
             }
@@ -39,7 +39,7 @@ namespace ChocolateStore
 
             if (args.Length != 2)
             {
-                WriteError("USAGE: ChocolateStore <directory> <url>");
+                WriteError("USAGE: ChocolateStore <directory> <package>");
                 return null;
             }
 
@@ -56,13 +56,7 @@ namespace ChocolateStore
                 Console.WriteLine("Created Directory '{0}'", arguments.Directory);
             }
 
-            if (Uri.IsWellFormedUriString(args[1], UriKind.Absolute))
-            {
-                arguments.Url = args[1];
-            } else
-            {
-                arguments.PackageName = args[1];
-            }
+            arguments.PackageName = args[1];
 
             return arguments;
 

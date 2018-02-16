@@ -47,6 +47,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Arguments.cs" />
+    <Compile Include="PackageInfo.cs" />
     <Compile Include="PackageCacher.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

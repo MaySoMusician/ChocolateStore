@@ -21,14 +21,11 @@ namespace ChocolateStore
         public event FileHandler DownloadingFile = delegate { };
         public event DownloadFailedHandler DownloadFailed = delegate { };
 
-        public void CachePackage(Arguments arguments)
+        public void CachePackage(string packageName, string directory)
         {
-            if (arguments.Url == null)
-            {
-                arguments.Url = GetPackagePath(arguments.PackageName);
-            }
+            var packageInfo = new PackageInfo(packageName);
 
-            var packagePath = DownloadFile(arguments.Url, arguments.Directory);
+            var packagePath = DownloadFile(packageInfo.url, directory);
 
             using (var zip = ZipFile.Read(packagePath))
             {
@@ -36,7 +33,6 @@ namespace ChocolateStore
 
                 if (entry != null) {
                     string content = null;
-                    var packageName = Path.GetFileNameWithoutExtension(packagePath);
 
                     using (MemoryStream ms = new MemoryStream()) {
                         entry.Extract(ms);
@@ -47,12 +43,20 @@ namespace ChocolateStore
                         }
                     }
 
-                    content = CacheUrlFiles(Path.Combine(arguments.Directory, packageName), content);
+                    content = CacheUrlFiles(Path.Combine(directory, packageName), content);
                     zip.UpdateEntry(INSTALL_FILE, content);
                     zip.Save();
 
                 }
 
+            }
+
+            if (packageInfo.dependencies != null)
+            {
+                foreach (var dep in packageInfo.dependencies)
+                {
+                    CachePackage(dep, directory);
+                }
             }
 
         }
@@ -68,16 +72,6 @@ namespace ChocolateStore
 
             return Regex.Replace(content, pattern, new MatchEvaluator(m => DownloadFile(m.Value, folder)));
 
-        }
-
-        private string GetPackagePath(string packageName)
-        {
-            var url = "https://chocolatey.org/packages/" + packageName;
-            var web = new HtmlWeb();
-            var doc = web.Load(url);
-            return doc.DocumentNode
-                .SelectSingleNode("//a[contains(@title, 'nupkg')]")
-                .Attributes["href"].Value;
         }
 
         private string DownloadFile(string url, string destination)
