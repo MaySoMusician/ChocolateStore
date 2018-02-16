@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Ionic.Zip;
+using HtmlAgilityPack;
 
 namespace ChocolateStore
 {
@@ -20,9 +21,14 @@ namespace ChocolateStore
 		public event FileHandler DownloadingFile = delegate { };		
 		public event DownloadFailedHandler DownloadFailed = delegate { };
 
-		public void CachePackage(string dir, string url)
+		public void CachePackage(Arguments arguments)
 		{
-			var packagePath = DownloadFile(url, dir);
+			if (arguments.Url == null)
+			{
+				arguments.Url = GetPackagePath(arguments.PackageName);
+			}
+
+			var packagePath = DownloadFile(arguments.Url, arguments.Directory);
 
 			using (var zip = ZipFile.Read(packagePath))
 			{
@@ -41,7 +47,7 @@ namespace ChocolateStore
                         }
                     }
 
-					content = CacheUrlFiles(Path.Combine(dir, packageName), content);
+					content = CacheUrlFiles(Path.Combine(arguments.Directory, packageName), content);
 					zip.UpdateEntry(INSTALL_FILE, content);
 					zip.Save();
 
@@ -62,6 +68,16 @@ namespace ChocolateStore
 
 			return Regex.Replace(content, pattern, new MatchEvaluator(m => DownloadFile(m.Value, folder)));
 
+		}
+
+		private string GetPackagePath(string packageName)
+		{
+			var url = "https://chocolatey.org/packages/" + packageName;
+			var web = new HtmlWeb();
+			var doc = web.Load(url);
+			return doc.DocumentNode
+				.SelectSingleNode("//a[contains(@title, 'nupkg')]")
+				.Attributes["href"].Value;
 		}
 
 		private string DownloadFile(string url, string destination)
