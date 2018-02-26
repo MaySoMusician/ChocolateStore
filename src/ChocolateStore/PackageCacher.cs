@@ -65,7 +65,6 @@ namespace ChocolateStore
 
         private string CacheUrlFiles(string folder, string content, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
         {
-
             const string pattern = "(?<=['\"])http[\\S ]*(?=['\"])";
 
             if (!Directory.Exists(folder))
@@ -73,36 +72,107 @@ namespace ChocolateStore
                 Directory.CreateDirectory(folder);
             }
 
+            var variablesWithAlternatives = variables.ToList();
+
+            // replace variables for which there is only one value
             foreach (var variable in variables)
             {
-                content = content.Replace("${" + variable.Item1 + "}", variable.Item2.First());
+                if (variable.Item2.Count() == 1)
+                {
+                    content = content.Replace("${" + variable.Item1 + "}", variable.Item2.First());
+                    variablesWithAlternatives.Remove(variable);
+                }
             }
 
-            return Regex.Replace(content, pattern, new MatchEvaluator(m => DownloadFile(m.Value, folder)));
+            var variableCombinations = GetVariablePermutations(variablesWithAlternatives);
+            return Regex.Replace(content, pattern, m =>
+            {
+                var fileNameWithVariables = Path.GetFileName(new Uri(m.Value).LocalPath);
+                fileNameWithVariables = variablesWithAlternatives.Aggregate("", (output, variable) => output + "${" + variable.Item1 + "}_") + fileNameWithVariables;
+                var path = Path.Combine(folder, fileNameWithVariables);
 
+                foreach (var combination in variableCombinations)
+                {
+                    var uriWithoutVariables = m.Value;
+                    var fileNameWithOutVariables = fileNameWithVariables.ToString();
+                    foreach (var variable in combination)
+                    {
+                        uriWithoutVariables = uriWithoutVariables.Replace("${" + variable.Item1 + "}", variable.Item2);
+                        fileNameWithOutVariables = fileNameWithOutVariables.Replace("${" + variable.Item1 + "}", variable.Item2);
+                    }
+                    DownloadFile(uriWithoutVariables, folder, fileNameWithOutVariables, true);
+                }
+
+                return path;
+            });
         }
 
-        private string DownloadFile(string url, string destination)
+        /// <summary>
+        /// Returns a list of all possible permutations that result from combining the variables passed into the moethod.
+        /// </summary>
+        /// <param name="variableOptions"></param>
+        /// <returns></returns>
+        private List<List<Tuple<string, string>>> GetVariablePermutations(List<Tuple<string, IEnumerable<string>>> variableOptions)
         {
+            var variableCombinations = new List<List<Tuple<string, string>>>();
+            RecursiveVariableCombiner(variableOptions.ToList(), new List<Tuple<string, string>>(), variableCombinations);
+            return variableCombinations;
+        }
 
+        private void RecursiveVariableCombiner(List<Tuple<string, IEnumerable<string>>> remainingVariableOptions, List<Tuple<string, string>> alreadySetVariableValues, List<List<Tuple<string, string>>> variableCombinations)
+        {
+            var newVariableList = remainingVariableOptions?.ToList();
+            var currentVariable = newVariableList?.FirstOrDefault();
+            if (currentVariable == null)
+            {
+                variableCombinations.Add(alreadySetVariableValues);
+                return;
+            }
+
+            newVariableList.Remove(currentVariable);
+
+            foreach (var value in currentVariable.Item2)
+            {
+                var newPath = alreadySetVariableValues.ToList();
+                newPath.Add(Tuple.Create(currentVariable.Item1, value));
+                RecursiveVariableCombiner(newVariableList, newPath, variableCombinations);
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="url">The url to download the file from.</param>
+        /// <param name="localDirectory">The directory into which the file should be stored.</param>
+        /// <param name="localFileName">The file name to which the file should be saved. If this arguments is left empty, the file name on the server will be used.</param>
+        /// <param name="forceDownload">If this parameter is set to true, the method will download the file from the server even if it already exists on the local directory.</param>
+        /// <returns>The local path of the downloaded file.</returns>
+        private string DownloadFile(string url, string localDirectory, string localFileName = "", bool forceDownload = false)
+        {
             try
             {
                 var request = WebRequest.Create(url);
                 var response = request.GetResponse();
-                var fileName = Path.GetFileName(response.ResponseUri.LocalPath);
-                var filePath = Path.Combine(destination, fileName);
+                if (String.IsNullOrEmpty(localFileName))
+                    localFileName = Path.GetFileName(response.ResponseUri.LocalPath);
+                var filePath = Path.Combine(localDirectory, localFileName);
 
                 if (File.Exists(filePath))
                 {
-                    SkippingFile(fileName);
-                }
-                else
-                {
-                    DownloadingFile(fileName);
-                    using (var fs = File.Create(filePath))
+                    if (forceDownload)
                     {
-                        response.GetResponseStream().CopyTo(fs);
+                        File.Delete(filePath);
                     }
+                    else
+                    {
+                        SkippingFile(localFileName);
+                        return filePath;
+                    }
+                }
+                DownloadingFile(localFileName);
+                using (var fs = File.Create(filePath))
+                {
+                    response.GetResponseStream().CopyTo(fs);
                 }
 
                 return filePath;
