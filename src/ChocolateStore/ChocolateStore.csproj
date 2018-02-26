@@ -46,6 +46,7 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ArgumentParser.cs" />
     <Compile Include="Arguments.cs" />
     <Compile Include="PackageInfo.cs" />
     <Compile Include="PackageCacher.cs" />
