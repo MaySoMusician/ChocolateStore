@@ -13,8 +13,10 @@ namespace ChocolateStore
         {
             Console.WriteLine("Reading package '{0}'", packageName);
             this.name = packageName;
-            var web = new HtmlWeb();
-            var doc = web.Load("https://chocolatey.org/packages/" + packageName);
+			var web = new System.Net.WebClient();
+			var content = web.DownloadString("https://chocolatey.org/packages/" + packageName);
+			var doc = new HtmlDocument ();
+			doc.LoadHtml (content);
             this.url = doc.DocumentNode
                 .SelectSingleNode("//a[contains(@title, 'nupkg')]")
                 .Attributes["href"].Value;
