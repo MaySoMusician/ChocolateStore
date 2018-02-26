@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -21,7 +22,7 @@ namespace ChocolateStore
         public event FileHandler DownloadingFile = delegate { };
         public event DownloadFailedHandler DownloadFailed = delegate { };
 
-        public void CachePackage(string packageName, string directory)
+        public void CachePackage(string packageName, string directory, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
         {
             var packageInfo = new PackageInfo(packageName);
 
@@ -31,10 +32,12 @@ namespace ChocolateStore
             {
                 var entry = zip.FirstOrDefault(x => string.Equals(x.FileName, INSTALL_FILE, StringComparison.OrdinalIgnoreCase));
 
-                if (entry != null) {
+                if (entry != null)
+                {
                     string content = null;
 
-                    using (MemoryStream ms = new MemoryStream()) {
+                    using (MemoryStream ms = new MemoryStream())
+                    {
                         entry.Extract(ms);
                         ms.Position = 0;
                         using (StreamReader reader = new StreamReader(ms, true))
@@ -43,31 +46,36 @@ namespace ChocolateStore
                         }
                     }
 
-                    content = CacheUrlFiles(Path.Combine(directory, packageName), content);
+                    content = CacheUrlFiles(Path.Combine(directory, packageName), content, variables);
                     zip.UpdateEntry(INSTALL_FILE, content);
                     zip.Save();
 
                 }
-
             }
 
             if (packageInfo.dependencies != null)
             {
                 foreach (var dep in packageInfo.dependencies)
                 {
-                    CachePackage(dep, directory);
+                    CachePackage(dep, directory, variables);
                 }
             }
 
         }
 
-        private string CacheUrlFiles(string folder, string content)
+        private string CacheUrlFiles(string folder, string content, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
         {
 
             const string pattern = "(?<=['\"])http[\\S ]*(?=['\"])";
 
-            if (!Directory.Exists(folder)) {
+            if (!Directory.Exists(folder))
+            {
                 Directory.CreateDirectory(folder);
+            }
+
+            foreach (var variable in variables)
+            {
+                content = content.Replace("${" + variable.Item1 + "}", variable.Item2.First());
             }
 
             return Regex.Replace(content, pattern, new MatchEvaluator(m => DownloadFile(m.Value, folder)));

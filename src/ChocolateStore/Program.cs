@@ -18,7 +18,7 @@ namespace ChocolateStore
             {
                 var arguments = ArgumentParser.ParseArguments(args);
                 CreateDirectoryIfNonExistent(arguments.Directory);
-                cacher.CachePackage(arguments.PackageName, arguments.Directory);
+                cacher.CachePackage(arguments.PackageName, arguments.Directory, arguments.Variables);
             }
             catch (Exception ex)
             {
