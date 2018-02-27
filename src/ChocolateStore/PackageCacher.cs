@@ -63,81 +63,42 @@ namespace ChocolateStore
 
         }
 
-        private string CacheUrlFiles(string folder, string content, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
+        /// <summary>
+        /// Scans the content for URLs, downloads these files to the specified local directory and replaces
+        /// the URLs in the content with the path of the downloaded local files.
+        /// </summary>
+        /// <param name="localDirectory">The directory in which the files should be stored locally</param>
+        /// <param name="content">The string that should be scanned for URLs</param>
+        /// <param name="variables">Variables like ${name} that must be resolved to get valid URLs. The first item in the tuple is the name of the variable. The second item of the tuple is a  list of the possible values of the variable.</param>
+        /// <returns>The content string, in which all Urls are replaced by local file paths.</returns>
+        private string CacheUrlFiles(string localDirectory, string content, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
         {
             const string pattern = "(?<=['\"])http[\\S ]*(?=['\"])";
 
-            if (!Directory.Exists(folder))
+            if (!Directory.Exists(localDirectory))
             {
-                Directory.CreateDirectory(folder);
+                Directory.CreateDirectory(localDirectory);
             }
 
-            var variablesWithAlternatives = variables.ToList();
+            var variablesHavingAlternatives = Variables.ResolveVariablesWithoutAlternatives(ref content, variables);
+            var variablePermutations = Variables.GetVariablePermutations(variablesHavingAlternatives);
 
-            // replace variables for which there is only one value
-            foreach (var variable in variables)
+            return Regex.Replace(content, pattern, match =>
             {
-                if (variable.Item2.Count() == 1)
-                {
-                    content = content.Replace("${" + variable.Item1 + "}", variable.Item2.First());
-                    variablesWithAlternatives.Remove(variable);
-                }
-            }
+                var fileName = Path.GetFileName(new Uri(match.Value).LocalPath);
+                var fileNameWithVariables = Variables.GetPrefixForVariables(variablesHavingAlternatives.Select(t => t.Item1)) + fileName;
 
-            var variableCombinations = GetVariablePermutations(variablesWithAlternatives);
-            return Regex.Replace(content, pattern, m =>
-            {
-                var fileNameWithVariables = Path.GetFileName(new Uri(m.Value).LocalPath);
-                fileNameWithVariables = variablesWithAlternatives.Aggregate("", (output, variable) => output + "${" + variable.Item1 + "}_") + fileNameWithVariables;
-                var path = Path.Combine(folder, fileNameWithVariables);
-
-                foreach (var combination in variableCombinations)
+                foreach (var permutation in variablePermutations)
                 {
-                    var uriWithoutVariables = m.Value;
-                    var fileNameWithOutVariables = fileNameWithVariables.ToString();
-                    foreach (var variable in combination)
-                    {
-                        uriWithoutVariables = uriWithoutVariables.Replace("${" + variable.Item1 + "}", variable.Item2);
-                        fileNameWithOutVariables = fileNameWithOutVariables.Replace("${" + variable.Item1 + "}", variable.Item2);
-                    }
-                    DownloadFile(uriWithoutVariables, folder, fileNameWithOutVariables, true);
+                    var resolvedUrl = Variables.ResolveVariables(match.Value, permutation);
+                    var resolvedFileName = Variables.ResolveVariables(fileNameWithVariables, permutation);
+                    DownloadFile(resolvedUrl, localDirectory, resolvedFileName, true);
                 }
 
-                return path;
+                var localPath = Path.Combine(localDirectory, fileNameWithVariables);
+                return localPath;
             });
-        }
-
-        /// <summary>
-        /// Returns a list of all possible permutations that result from combining the variables passed into the moethod.
-        /// </summary>
-        /// <param name="variableOptions"></param>
-        /// <returns></returns>
-        private List<List<Tuple<string, string>>> GetVariablePermutations(List<Tuple<string, IEnumerable<string>>> variableOptions)
-        {
-            var variableCombinations = new List<List<Tuple<string, string>>>();
-            RecursiveVariableCombiner(variableOptions.ToList(), new List<Tuple<string, string>>(), variableCombinations);
-            return variableCombinations;
-        }
-
-        private void RecursiveVariableCombiner(List<Tuple<string, IEnumerable<string>>> remainingVariableOptions, List<Tuple<string, string>> alreadySetVariableValues, List<List<Tuple<string, string>>> variableCombinations)
-        {
-            var newVariableList = remainingVariableOptions?.ToList();
-            var currentVariable = newVariableList?.FirstOrDefault();
-            if (currentVariable == null)
-            {
-                variableCombinations.Add(alreadySetVariableValues);
-                return;
-            }
-
-            newVariableList.Remove(currentVariable);
-
-            foreach (var value in currentVariable.Item2)
-            {
-                var newPath = alreadySetVariableValues.ToList();
-                newPath.Add(Tuple.Create(currentVariable.Item1, value));
-                RecursiveVariableCombiner(newVariableList, newPath, variableCombinations);
-            }
-        }
+        }        
 
         /// <summary>
         /// 
