@@ -8,7 +8,8 @@ namespace ChocolateStore
 {
     public static class ArgumentParser
     {
-        private const string ValueSeparator = "|";
+        private const string ValueSeparator = ",";
+        private const string UsageHint = "USAGE: ChocolateStore <directory> <package> ${variable1}=value1,value2 ${variable2}=value3 ...";
 
         public static Arguments ParseArguments(string[] args)
         {
@@ -26,7 +27,7 @@ namespace ChocolateStore
             {
                 var parsedVariable = ParseVariable(args[argNr]);
                 if (parsedVariable == null)
-                    throw new ArgumentException("USAGE: ChocolateStore <directory> <package> $variable1=value1 $variable2=value2 ...");
+                    throw new ArgumentException(UsageHint);
                 variableList.Add(parsedVariable);
             }
 
@@ -37,7 +38,7 @@ namespace ChocolateStore
 
         private static Tuple<string, IEnumerable<string>> ParseVariable(string expression)
         {
-            var regex = new Regex("\\$(.+?)=(.+)");
+            var regex = new Regex("\\$\\{(.+?)\\}=(.+)");
             var match = regex.Match(expression);
             if (match.Success == false)
                 return null;
