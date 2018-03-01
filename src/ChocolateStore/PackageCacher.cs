@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
 using Ionic.Zip;
 using HtmlAgilityPack;
 
@@ -12,6 +15,12 @@ namespace ChocolateStore
 {
     class PackageCacher
     {
+        public enum FileExistsBehavior
+        {
+            Replace,
+            Skip,
+            Rename
+        }
 
         private const string INSTALL_FILE = "tools/chocolateyInstall.ps1";
 
@@ -29,24 +38,25 @@ namespace ChocolateStore
             var packagePath = DownloadFile(packageInfo.url, directory);
 
             using (var zip = ZipFile.Read(packagePath))
-            {
-                var entry = zip.FirstOrDefault(x => string.Equals(x.FileName, INSTALL_FILE, StringComparison.OrdinalIgnoreCase));
+            {                
+                var installFile = zip.FirstOrDefault(x => string.Equals(x.FileName, INSTALL_FILE, StringComparison.OrdinalIgnoreCase));
 
-                if (entry != null)
+                if (installFile != null)
                 {
                     string content = null;
 
-                    using (MemoryStream ms = new MemoryStream())
+                    using (var memoryStream = new MemoryStream())
                     {
-                        entry.Extract(ms);
-                        ms.Position = 0;
-                        using (StreamReader reader = new StreamReader(ms, true))
+                        installFile.Extract(memoryStream);
+                        memoryStream.Position = 0;
+                        using (var reader = new StreamReader(memoryStream, true))
                         {
                             content = reader.ReadToEnd();
                         }
                     }
 
-                    content = CacheUrlFiles(Path.Combine(directory, packageName), content, variables);
+                    var version = GetPackageVersion(zip);
+                    content = CacheUrlFiles(Path.Combine(directory, packageName + "-" + version), content, variables);
                     zip.UpdateEntry(INSTALL_FILE, content);
                     zip.Save();
 
@@ -61,6 +71,33 @@ namespace ChocolateStore
                 }
             }
 
+        }
+
+        /// <summary>
+        /// Checks the nuget package for its version and returns it as a string.
+        /// </summary>
+        /// <param name="nugetPackage"></param>
+        /// <returns>the version of the package</returns>
+        private string GetPackageVersion(ZipFile nugetPackage)
+        {
+            var nuspecFile = nugetPackage.FirstOrDefault(x => Path.GetExtension(x.FileName).Equals(".nuspec", StringComparison.OrdinalIgnoreCase));
+            if (nuspecFile == null)
+                throw new Exception("Could not parse nuget package " + nugetPackage.Name);
+
+            using (var reader = nuspecFile.OpenReader())
+            {
+                var doc = new XmlDocument();
+                doc.Load(reader);
+
+                var namespaceManager = new XmlNamespaceManager(doc.NameTable);
+                namespaceManager.AddNamespace("nuspec", "http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd");
+
+                var versionNode =
+                    doc.DocumentElement?.SelectSingleNode("nuspec:metadata/nuspec:version", namespaceManager);
+                if (versionNode == null)
+                    throw new Exception("Could not parse nuget package " + nugetPackage.Name);
+                return versionNode.InnerText;
+            }
         }
 
         /// <summary>
@@ -88,27 +125,40 @@ namespace ChocolateStore
                 var fileName = Path.GetFileName(new Uri(match.Value).LocalPath);
                 var fileNameWithVariables = Variables.GetPrefixForVariables(variablesHavingAlternatives.Select(t => t.Item1)) + fileName;
 
+                var suffix = "";
                 foreach (var permutation in variablePermutations)
                 {
                     var resolvedUrl = Variables.ResolveVariables(match.Value, permutation);
                     var resolvedFileName = Variables.ResolveVariables(fileNameWithVariables, permutation);
-                    DownloadFile(resolvedUrl, localDirectory, resolvedFileName, true);
+                    DownloadFile(resolvedUrl, localDirectory, out suffix, resolvedFileName, FileExistsBehavior.Rename);
                 }
 
-                var localPath = Path.Combine(localDirectory, fileNameWithVariables);
+                var localPath = Path.Combine(localDirectory, suffix + fileNameWithVariables);
                 return localPath;
             });
-        }        
+        }
 
         /// <summary>
-        /// 
+        /// Downloads a file from the specified URL. Skips already existing files.
+        /// </summary>
+        /// <param name="url"></param>
+        /// <param name="localDirectory"></param>
+        /// <returns>the local path of the downloaded file</returns>
+        private string DownloadFile(string url, string localDirectory)
+        {
+            return DownloadFile(url, localDirectory, out _, "", FileExistsBehavior.Skip);
+        }
+
+        /// <summary>
+        /// Downloads a file from the specified URL.
         /// </summary>
         /// <param name="url">The url to download the file from.</param>
         /// <param name="localDirectory">The directory into which the file should be stored.</param>
+        /// <param name="suffix">The suffix added to the local file name to make the file unique.</param>
         /// <param name="localFileName">The file name to which the file should be saved. If this arguments is left empty, the file name on the server will be used.</param>
-        /// <param name="forceDownload">If this parameter is set to true, the method will download the file from the server even if it already exists on the local directory.</param>
-        /// <returns>The local path of the downloaded file.</returns>
-        private string DownloadFile(string url, string localDirectory, string localFileName = "", bool forceDownload = false)
+        /// <param name="fileExistsBehavior">Specifies what should be done if the file name already exists locally.</param>
+        /// <returns>the local path of the downloaded file</returns>
+        private string DownloadFile(string url, string localDirectory, out string suffix, string localFileName = "", FileExistsBehavior fileExistsBehavior = FileExistsBehavior.Skip)
         {
             try
             {
@@ -116,35 +166,64 @@ namespace ChocolateStore
                 var response = request.GetResponse();
                 if (String.IsNullOrEmpty(localFileName))
                     localFileName = Path.GetFileName(response.ResponseUri.LocalPath);
-                var filePath = Path.Combine(localDirectory, localFileName);
+                var localfilePath = Path.Combine(localDirectory, localFileName);
 
-                if (File.Exists(filePath))
+                suffix = "";
+
+                if (File.Exists(localfilePath))
                 {
-                    if (forceDownload)
+                    switch (fileExistsBehavior)
                     {
-                        File.Delete(filePath);
-                    }
-                    else
-                    {
-                        SkippingFile(localFileName);
-                        return filePath;
+                        case FileExistsBehavior.Replace:
+                            File.Delete(localfilePath);
+                            break;
+                        case FileExistsBehavior.Skip:
+                            SkippingFile(localFileName);
+                            return localfilePath;
+                        case FileExistsBehavior.Rename:
+                            localfilePath = GetUniquePath(localfilePath, out suffix);
+                            localFileName = suffix + localFileName;
+                            break;
                     }
                 }
                 DownloadingFile(localFileName);
-                using (var fs = File.Create(filePath))
+                using (var fs = File.Create(localfilePath))
                 {
                     response.GetResponseStream().CopyTo(fs);
                 }
 
-                return filePath;
+                return localfilePath;
             }
             catch (Exception ex)
             {
                 DownloadFailed(url, ex);
+                suffix = "";
                 return url;
             }
-
         }
 
+        /// <summary>
+        /// Creates a unique filename if another file already exists at the path.
+        /// If there is no file at the path, it will return the original path.
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="addedSuffix">the suffix added before the filename to make the path unique</param>
+        /// <returns>the unique file path</returns>
+        private string GetUniquePath(string path, out string addedSuffix)
+        {
+            var dir = Path.GetDirectoryName(path);
+            var fileName = Path.GetFileName(path);
+
+            for (var i = 2; ; i++)
+            {
+                if (!File.Exists(path))
+                {
+                    addedSuffix = i == 2 ? "" : i - 1 + "_";
+                    return path;
+                }
+
+                path = Path.Combine(dir, i + "_" + fileName);
+            }
+        }
     }
 }
