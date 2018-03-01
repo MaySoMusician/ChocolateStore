@@ -90,10 +90,13 @@ namespace ChocolateStore
                 doc.Load(reader);
 
                 var namespaceManager = new XmlNamespaceManager(doc.NameTable);
-                namespaceManager.AddNamespace("nuspec", "http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd");
+                namespaceManager.AddNamespace("nuspec2011", "http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd");
+                namespaceManager.AddNamespace("nuspec2010", "http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd");
 
                 var versionNode =
-                    doc.DocumentElement?.SelectSingleNode("nuspec:metadata/nuspec:version", namespaceManager);
+                    doc.DocumentElement?.SelectSingleNode("nuspec2010:metadata/nuspec2010:version", namespaceManager)
+                    ?? doc.DocumentElement?.SelectSingleNode("nuspec2011:metadata/nuspec2011:version",
+                        namespaceManager);
                 if (versionNode == null)
                     throw new Exception("Could not parse nuget package " + nugetPackage.Name);
                 return versionNode.InnerText;
