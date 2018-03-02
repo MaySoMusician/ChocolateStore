@@ -9,7 +9,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using Ionic.Zip;
-using HtmlAgilityPack;
 
 namespace ChocolateStore
 {
@@ -33,9 +32,12 @@ namespace ChocolateStore
 
         public void CachePackage(string packageName, string directory, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
         {
-            var packageInfo = new PackageInfo(packageName);
+            var packageInfo = PackageInfo.Find(packageName);
 
-            var packagePath = DownloadFile(packageInfo.url, directory);
+            Console.WriteLine("Reading package '{0}'", packageInfo.Name);
+            Console.WriteLine("package URL: '{0}'", packageInfo.Url);
+
+            var packagePath = DownloadFile(packageInfo.Url, directory);
 
             using (var zip = ZipFile.Read(packagePath))
             {                
@@ -55,52 +57,21 @@ namespace ChocolateStore
                         }
                     }
 
-                    var version = GetPackageVersion(zip);
-                    content = CacheUrlFiles(Path.Combine(directory, packageName + "-" + version), content, variables);
+                    content = CacheUrlFiles(Path.Combine(directory, packageName + "-" + packageInfo.Version), content, variables);
                     zip.UpdateEntry(INSTALL_FILE, content);
                     zip.Save();
 
                 }
             }
 
-            if (packageInfo.dependencies != null)
+            if (packageInfo.Dependencies != null)
             {
-                foreach (var dep in packageInfo.dependencies)
+                foreach (var dep in packageInfo.Dependencies)
                 {
                     CachePackage(dep, directory, variables);
                 }
             }
 
-        }
-
-        /// <summary>
-        /// Checks the nuget package for its version and returns it as a string.
-        /// </summary>
-        /// <param name="nugetPackage"></param>
-        /// <returns>the version of the package</returns>
-        private string GetPackageVersion(ZipFile nugetPackage)
-        {
-            var nuspecFile = nugetPackage.FirstOrDefault(x => Path.GetExtension(x.FileName).Equals(".nuspec", StringComparison.OrdinalIgnoreCase));
-            if (nuspecFile == null)
-                throw new Exception("Could not parse nuget package " + nugetPackage.Name);
-
-            using (var reader = nuspecFile.OpenReader())
-            {
-                var doc = new XmlDocument();
-                doc.Load(reader);
-
-                var namespaceManager = new XmlNamespaceManager(doc.NameTable);
-                namespaceManager.AddNamespace("nuspec2011", "http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd");
-                namespaceManager.AddNamespace("nuspec2010", "http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd");
-
-                var versionNode =
-                    doc.DocumentElement?.SelectSingleNode("nuspec2010:metadata/nuspec2010:version", namespaceManager)
-                    ?? doc.DocumentElement?.SelectSingleNode("nuspec2011:metadata/nuspec2011:version",
-                        namespaceManager);
-                if (versionNode == null)
-                    throw new Exception("Could not parse nuget package " + nugetPackage.Name);
-                return versionNode.InnerText;
-            }
         }
 
         /// <summary>
