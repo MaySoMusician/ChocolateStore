@@ -35,7 +35,7 @@ namespace ChocolateStore
         /// <returns></returns>
         public static PackageInfo Find(string packageName)
         {
-            var package = Repository.FindPackage(packageName) as DataServicePackage;
+            var package = Repository.GetPackages().Where(p => p.Id == packageName && p.IsLatestVersion).ToList().SingleOrDefault(p => p.IsReleaseVersion()) as DataServicePackage;
             if (package == null)
             {
                 throw new Exception($"Could not get package with id ${packageName} from ${RepositoryUrl}");
