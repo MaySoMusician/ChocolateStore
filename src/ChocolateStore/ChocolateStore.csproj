@@ -50,7 +50,6 @@
     </Reference>
     <Reference Include="Ionic.Zip">
       <HintPath>..\..\packages\Ionic.Zip.1.9.1.8\lib\Ionic.Zip.dll</HintPath>
-      <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>

@@ -84,7 +84,7 @@ namespace ChocolateStore
         /// <returns>The content string, in which all Urls are replaced by local file paths.</returns>
         private string CacheUrlFiles(string localDirectory, string content, IEnumerable<Tuple<string, IEnumerable<string>>> variables)
         {
-            const string pattern = "(?<=['\"])http[\\S ]*(?=['\"])";
+            const string pattern = "(?<=['\"])(ftp|http)[\\S ]*(?=['\"])";
 
             if (!Directory.Exists(localDirectory))
             {
