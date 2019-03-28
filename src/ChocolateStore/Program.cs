@@ -8,7 +8,6 @@ namespace ChocolateStore
 
         static void Main(string[] args)
         {
-
             PackageCacher cacher = new PackageCacher();
 
             cacher.SkippingFile += cacher_SkippingFile;
@@ -17,13 +16,9 @@ namespace ChocolateStore
 
             try
             {
-                var arguments = ParseArguments(args);
-
-                if (arguments != null)
-                {
-                    cacher.CachePackage(arguments.PackageName, arguments.Directory);
-                }
-
+                var arguments = ArgumentParser.ParseArguments(args);
+                CreateDirectoryIfNonExistent(arguments.Directory);
+                cacher.CachePackage(arguments.PackageName, arguments.Directory, arguments.Variables);
             }
             catch (Exception ex)
             {
@@ -32,34 +27,18 @@ namespace ChocolateStore
 
         }
 
-        private static Arguments ParseArguments(string[] args)
+        private static void CreateDirectoryIfNonExistent(string directory)
         {
-
-            Arguments arguments = new Arguments();
-
-            if (args.Length != 2)
+            if (!Directory.Exists(directory))
             {
-                WriteError("USAGE: ChocolateStore <directory> <package>");
-                return null;
-            }
-
-            arguments.Directory = args[0];
-
-            if (!Directory.Exists(arguments.Directory))
-            {
-                if (!PromptConfirm("Directory '{0}' does not exist. Create?", arguments.Directory))
+                if (!PromptConfirm("Directory '{0}' does not exist. Create?", directory))
                 {
-                    WriteError("Directory '{0}' does not exist.", arguments.Directory);
-                    return null;
+                    WriteError("Directory '{0}' does not exist.", directory);
+                    return;
                 }
-                Directory.CreateDirectory(arguments.Directory);
-                Console.WriteLine("Created Directory '{0}'", arguments.Directory);
+                Directory.CreateDirectory(directory);
+                Console.WriteLine("Created Directory '{0}'", directory);
             }
-
-            arguments.PackageName = args[1];
-
-            return arguments;
-
         }
 
         private static void cacher_SkippingFile(string fileName)
@@ -108,6 +87,5 @@ namespace ChocolateStore
             Console.WriteLine();
             return response == ConsoleKey.Y;
         }
-
     }
 }
