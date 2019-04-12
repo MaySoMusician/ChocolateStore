@@ -100,14 +100,23 @@ namespace ChocolateStore
                 var fileNameWithVariables = Variables.GetPrefixForVariables(variablesHavingAlternatives.Select(t => t.Item1)) + fileName;
 
                 var suffix = "";
+                var lastLocallyStoredFile = "";
                 foreach (var permutation in variablePermutations)
                 {
                     var resolvedUrl = Variables.ResolveVariables(match.Value, permutation);
                     var resolvedFileName = Variables.ResolveVariables(fileNameWithVariables, permutation);
-                    DownloadFile(resolvedUrl, localDirectory, out suffix, resolvedFileName, FileExistsBehavior.Rename);
+                    lastLocallyStoredFile = DownloadFile(resolvedUrl, localDirectory, out suffix, resolvedFileName, FileExistsBehavior.Rename);
                 }
 
-                var localPath = Path.Combine(localDirectory, suffix + fileNameWithVariables);
+                string localPath = "";
+                if(String.IsNullOrEmpty(fileNameWithVariables)) 
+                {                
+                    localPath = lastLocallyStoredFile;
+                }
+                else
+                {
+                    localPath = Path.Combine(localDirectory, suffix + fileNameWithVariables);
+                }
                 return localPath;
             });
         }

@@ -182,3 +182,4 @@ UpgradeLog*.htm
 # Microsoft Fakes
 FakesAssemblies/
 ChocolateStore.userprefs
+.vs/ChocolateStore/xs/UserPrefs.xml
